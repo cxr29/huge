@@ -54,6 +54,10 @@ func Open(driverName, dataSourceName string) (h Huge, err error) {
 	return
 }
 
+func (h Huge) Now() time.Time {
+	return LimitTime(h.TimePrecision, time.Now())
+}
+
 func (h Huge) DB() *sql.DB {
 	db, _ := h.querier.(*sql.DB)
 	return db

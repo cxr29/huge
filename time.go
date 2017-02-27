@@ -14,7 +14,7 @@ import (
 
 var precisions = [...]int{1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8}
 
-func limitTimePrecision(p int, t time.Time) time.Time {
+func LimitTime(p int, t time.Time) time.Time {
 	if p == 0 {
 		return time.Unix(t.Unix(), 0)
 	} else if 1 <= p && p <= 8 {
@@ -27,7 +27,7 @@ func limitTimePrecision(p int, t time.Time) time.Time {
 func (c *Column) convertTime(p int, t time.Time) interface{} {
 	f := c.last()
 	if x := f.Type(); x == typeTime {
-		t = limitTimePrecision(p, t)
+		t = LimitTime(p, t)
 		if f.Is(oPointer) {
 			return &t
 		} else {
@@ -82,7 +82,7 @@ func (c *Column) setTime(v reflect.Value, p int, t time.Time) bool {
 		f := c.last()
 		x := f.Type()
 		if x == typeTime {
-			i = limitTimePrecision(p, t)
+			i = LimitTime(p, t)
 		} else {
 			switch x.Kind() {
 			case reflect.Int:
