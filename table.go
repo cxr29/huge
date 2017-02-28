@@ -163,18 +163,23 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else {
+		}
+		if !f.IsMany() {
 			if len(f.alias) > 0 {
 				a = append(a, f.alias)
 			} else {
 				a = append(a, f.name)
 			}
-			c.Rename(strings.Join(a, ""))
-			k := strings.ToLower(c.Name)
-			if _, ok := t.m[k]; ok {
-				return nil, fmt.Errorf("huge: table %s: duplicate column name: %s", t.Name, k)
+			if f.IsOne() {
+				c.Name = strings.Join(a, "")
 			} else {
-				t.m[k] = c.i
+				c.Rename(strings.Join(a, ""))
+				k := strings.ToLower(c.Name)
+				if _, ok := t.m[k]; ok {
+					return nil, fmt.Errorf("huge: table %s: duplicate column name: %s", t.Name, k)
+				} else {
+					t.m[k] = c.i
+				}
 			}
 		}
 	}
@@ -216,23 +221,20 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 					}
 				}
 			}
-			a = a[:0]
 			if len(f.alias) > 0 {
-				a = append(a, f.alias)
 				f = c.last()
 			} else {
-				a = append(a, c.r.s.name)
 				f = c.last()
 				if len(f.alias) > 0 {
-					a = append(a, f.alias)
+					c.Name += f.alias
 				} else {
-					a = append(a, f.name)
+					c.Name += f.name
 				}
 			}
 			if f.IsOne() || f.IsMany() || f.IsInline() {
 				panic(false)
 			}
-			c.Rename(strings.Join(a, ""))
+			c.Operand = query.IQ(c.Name)
 			k := strings.ToLower(c.Name)
 			if _, ok := t.m[k]; ok {
 				return nil, fmt.Errorf("huge: table %s: duplicate column name: %s", t.Name, k)

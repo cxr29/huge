@@ -321,20 +321,25 @@ func (c *Column) field(v reflect.Value) (reflect.Value, bool) {
 	if c.isMany() || v.Type() != c.t.s.t {
 		panic(false)
 	}
-	n := len(c.a) - 1
-	for i := 0; i < n; i++ {
-		f := c.a[i]
-		if f.Is(oPointer) {
-			if v.IsNil() && v.CanSet() {
-				v.Set(reflect.New(f.Type()))
-			} else {
-				return v, false
+	if len(c.a) == 1 {
+		return v.Field(c.a[0].i), true
+	}
+	for i, f := range c.a {
+		if i > 0 {
+			if f := c.a[i-1]; f.Is(oPointer) {
+				if v.IsNil() {
+					if v.CanSet() {
+						v.Set(reflect.New(f.Type()))
+					} else {
+						return v, false
+					}
+				}
+				v = v.Elem()
 			}
-			v = v.Elem()
 		}
 		v = v.Field(f.i)
 	}
-	return v.Field(c.a[n].i), true
+	return v, true
 }
 func (c *Column) scan(v reflect.Value) (interface{}, func() error, bool) {
 	if v, ok := c.field(v); ok {
