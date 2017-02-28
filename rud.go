@@ -89,7 +89,6 @@ func (h Huge) rud(b byte, primaryKeys, row interface{}, columns []string) (_ int
 				if err != nil {
 					break
 				}
-				break
 			}
 		default:
 			if f.t != t {
@@ -148,7 +147,7 @@ func (h Huge) rud(b byte, primaryKeys, row interface{}, columns []string) (_ int
 		case 0:
 			v = reflect.Zero(reflect.PtrTo(t.s.t))
 		case 1:
-			v = reflect.MakeSlice(reflect.PtrTo(t.s.t), 0, len(a))
+			v = reflect.MakeSlice(reflect.SliceOf(reflect.PtrTo(t.s.t)), 0, len(a))
 		case 2:
 			v = reflect.MakeMap(reflect.MapOf(f.t, reflect.PtrTo(t.s.t)))
 		default:
