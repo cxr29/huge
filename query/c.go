@@ -89,6 +89,15 @@ func logic2(o bool, a []Condition, b []Condition) Condition {
 }
 
 func (l logic) Expand(n int, p ParameterFunc, q QuotationFunc) (string, []interface{}, error) {
+	if len(l.a) == 0 {
+		n := none("empty ")
+		if l.o {
+			n += "or"
+		} else {
+			n += "and"
+		}
+		return "", nil, n
+	}
 	var a []interface{}
 	var b bytes.Buffer
 	for k, v := range l.a {
@@ -139,44 +148,62 @@ type Logic struct {
 	c Condition
 }
 
+func (l *Logic) Empty() bool {
+	return l.c == nil
+}
+
 func (l *Logic) Not() *Logic {
-	l.c = l.c.Not()
+	if l.c != nil {
+		l.c = l.c.Not()
+	}
 	return l
 }
 
 func (l *Logic) And(a ...Condition) *Logic {
-	l.c = l.c.And(a...)
+	if len(a) > 0 {
+		if l.c != nil {
+			l.c = l.c.And(a...)
+		} else {
+			l.c = And(a...)
+		}
+	}
 	return l
 }
 
 func (l *Logic) Or(a ...Condition) *Logic {
-	l.c = l.c.Or(a...)
+	if len(a) > 0 {
+		if l.c != nil {
+			l.c = l.c.Or(a...)
+		} else {
+			l.c = Or(a...)
+		}
+	}
 	return l
 }
 
-func (l *Logic) Expand(n int, p ParameterFunc, q QuotationFunc) (string, []interface{}, error) {
-	s, a, err := Expand(l.c, true, n, p, q)
-	if err == nil && len(s) > 0 {
-		s = l.s + s
+func (l *Logic) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []interface{}, err error) {
+	if l.c != nil {
+		s, a, err = Expand(l.c, false, n, p, q)
+		if err == nil {
+			s = l.s + s
+		}
 	}
-	return s, a, err
+	return
+}
+
+func L1(prefix string, a ...Condition) *Logic {
+	l := &Logic{s: prefix}
+	return l.And(a...)
+}
+
+func L(a ...Condition) *Logic {
+	return L1("", a...)
 }
 
 func Where(a ...Condition) *Logic {
-	return &Logic{"WHERE ", And(a...)}
+	return L1("WHERE ", a...)
 }
 
 func Having(a ...Condition) *Logic {
-	return &Logic{"HAVING ", And(a...)}
-}
-
-func On(a ...Condition) *Logic {
-	return &Logic{"ON ", And(a...)}
-}
-
-func Using(a ...string) Expression {
-	if len(a) == 0 {
-		return empty("USING")
-	}
-	return Q3("USING (", ", ", ")").Add(a...)
+	return L1("HAVING ", a...)
 }

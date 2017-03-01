@@ -22,7 +22,7 @@ func (h Huge) Update(i interface{}, columns ...string) (interface{}, error) {
 		panic(t.errNoPrimaryKey())
 	}
 	a := t.updateFilter(columns...)
-	if a.Len() == 0 {
+	if a.Empty() {
 		return nil, t.errNoColumns()
 	}
 	var returning query.Expression

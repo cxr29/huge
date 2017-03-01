@@ -31,12 +31,12 @@ func (h Huge) rud(b byte, primaryKeys, row interface{}, columns []string) (_ int
 	switch b {
 	case 'r':
 		cols = t.Filter(columns...)
-		if cols.Len() == 0 {
+		if cols.Empty() {
 			return nil, 0, t.errNoColumns()
 		}
 	case 'u':
 		cols = t.updateFilter(columns...)
-		if cols.Len() == 0 {
+		if cols.Empty() {
 			return nil, 0, t.errNoColumns()
 		}
 	}

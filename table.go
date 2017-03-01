@@ -376,6 +376,10 @@ const Exclude = ""
 
 type Columns []*Column
 
+func (a Columns) Empty() bool {
+	return len(a) == 0
+}
+
 func (a Columns) Len() int {
 	return len(a)
 }

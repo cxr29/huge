@@ -14,6 +14,10 @@ type Query struct {
 	a []Expression
 }
 
+func (e *Query) Empty() bool {
+	return len(e.a) == 0
+}
+
 func (e *Query) Len() int {
 	return len(e.a)
 }
@@ -74,6 +78,10 @@ func (e *Query) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []i
 	return
 }
 
+func q2(operator string, a, b Expression) Expression {
+	return Q3("", " "+operator+" ", "", a, b)
+}
+
 func Q3(prefix, delimiter, suffix string, a ...Expression) *Query {
 	return &Query{'f', [...]string{prefix, delimiter, suffix}, a}
 }
@@ -94,6 +102,10 @@ type QueryS struct {
 	o bool
 	s []string
 	a []interface{}
+}
+
+func (e *QueryS) Empty() bool {
+	return len(e.a) == 0
 }
 
 func (e *QueryS) Len() int {
@@ -271,4 +283,12 @@ func (x) OrderBy(a ...Expression) *Query {
 
 func (x) GroupBy(a ...Expression) *Query {
 	return GroupBy().Append(a...)
+}
+
+func (x) Union(a ...Expression) *Query {
+	return Q3("", " UNION ", "", a...)
+}
+
+func (x) UnionAll(a ...Expression) *Query {
+	return Q3("", " UNION ALL ", "", a...)
 }

@@ -179,30 +179,6 @@ func (o Operand) As(s string) Expression {
 	return E("? AS ?", o, Identifier(s))
 }
 
-func (a Operand) InnerJoin(b Expression) Expression {
-	return E("? INNER JOIN ?", a, b)
-}
-
-func (a Operand) LeftJoin(b Expression) Expression {
-	return E("? LEFT JOIN ?", a, b)
-}
-
-func (a Operand) RightJoin(b Expression) Expression {
-	return E("? RIGHT JOIN ?", a, b)
-}
-
-func (a Operand) FullJoin(b Expression) Expression {
-	return E("? FULL JOIN ?", a, b)
-}
-
-func (a Operand) Union(b Expression) Expression {
-	return E("? UNION ?", a, b)
-}
-
-func (a Operand) UnionAll(b Expression) Expression {
-	return E("? UNION ALL ?", a, b)
-}
-
 func IsNull(c string) Condition {
 	return IQ(c).IsNull()
 }
@@ -297,44 +273,4 @@ func Sum(c string) Expression {
 
 func As(c, s string) Expression {
 	return IQ(c).As(s)
-}
-
-func InnerJoin(a, b string) Expression {
-	return IQ(a).InnerJoin(Identifier(b))
-}
-
-func LeftJoin(a, b string) Expression {
-	return IQ(a).LeftJoin(Identifier(b))
-}
-
-func RightJoin(a, b string) Expression {
-	return IQ(a).RightJoin(Identifier(b))
-}
-
-func FullJoin(a, b string) Expression {
-	return IQ(a).FullJoin(Identifier(b))
-}
-
-func (x) InnerJoin(a, b Expression) Expression {
-	return E2O(a).InnerJoin(b)
-}
-
-func (x) LeftJoin(a, b Expression) Expression {
-	return E2O(a).LeftJoin(b)
-}
-
-func (x) RightJoin(a, b Expression) Expression {
-	return E2O(a).RightJoin(b)
-}
-
-func (x) FullJoin(a, b Expression) Expression {
-	return E2O(a).FullJoin(b)
-}
-
-func (x) Union(a, b Expression) Expression {
-	return E2O(a).Union(b)
-}
-
-func (x) UnionAll(a, b Expression) Expression {
-	return E2O(a).UnionAll(b)
 }

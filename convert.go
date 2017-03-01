@@ -13,7 +13,7 @@ import (
 func Convert(collapse, encoding bool, dst, src interface{}, columns ...string) error {
 	t, a := newTable(src)
 	cols := t.Filter(columns...)
-	if cols.Len() == 0 {
+	if cols.Empty() {
 		return t.errNoColumns()
 	}
 	v, _ := ptrElem(src)

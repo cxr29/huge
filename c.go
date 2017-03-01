@@ -66,7 +66,7 @@ func (h Huge) Create(i interface{}) (interface{}, error) {
 		}
 		values.Add(c.Name, values.Len()/2+1)
 	}
-	if values.Len() == 0 {
+	if values.Empty() {
 		return nil, t.errNoColumns()
 	}
 	returning := false

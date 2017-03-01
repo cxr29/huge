@@ -24,7 +24,7 @@ func (h Huge) Load(i interface{}) (interface{}, error) {
 		}
 		values.Add(c.Name, values.Len()/2+1)
 	}
-	if values.Len() == 0 {
+	if values.Empty() {
 		return nil, t.errNoColumns()
 	}
 	s, _, err := h.Prepare(query.Q(query.Insert(t.Name), values))

@@ -20,7 +20,7 @@ func (h Huge) Read(i interface{}, columns ...string) (interface{}, error) {
 		panic(t.errNoPrimaryKey())
 	}
 	a := t.Filter(columns...)
-	if a.Len() == 0 {
+	if a.Empty() {
 		return nil, t.errNoColumns()
 	}
 	s := make([]*sql.Stmt, 2)
