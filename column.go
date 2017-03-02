@@ -405,8 +405,6 @@ func (c *Column) scanNew() (interface{}, scanNewFunc) {
 				}
 				if err != nil {
 					return
-				} else if f.Is(oPointer) {
-					return v, nil
 				}
 				return v.Elem(), nil
 			}
