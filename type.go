@@ -32,13 +32,17 @@ const (
 )
 
 var (
-	typeEmpty     = reflect.TypeOf(struct{}{})
-	typeString    = reflect.TypeOf("")
-	typeTime      = reflect.TypeOf(time.Time{})
-	typeInterface = reflect.TypeOf(([]interface{})(nil)).Elem()
-	typeScanner   = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
-	typeValuer    = reflect.TypeOf((*driver.Valuer)(nil)).Elem()
-	types         = map[Kind]reflect.Type{
+	typeEmpty       = reflect.TypeOf(struct{}{})
+	typeString      = reflect.TypeOf("")
+	typeTime        = reflect.TypeOf(time.Time{})
+	typeInterface   = reflect.TypeOf(([]interface{})(nil)).Elem()
+	typeNullBool    = reflect.TypeOf(sql.NullBool{})
+	typeNullInt64   = reflect.TypeOf(sql.NullInt64{})
+	typeNullFloat64 = reflect.TypeOf(sql.NullFloat64{})
+	typeNullString  = reflect.TypeOf(sql.NullString{})
+	typeScanner     = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
+	typeValuer      = reflect.TypeOf((*driver.Valuer)(nil)).Elem()
+	types           = map[Kind]reflect.Type{
 		Bool:    reflect.TypeOf(false),
 		Int:     reflect.TypeOf(int(0)),
 		Int8:    reflect.TypeOf(int8(0)),

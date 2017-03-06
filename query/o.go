@@ -13,8 +13,8 @@ type Operand struct {
 	e Expression
 }
 
-func (o Operand) Expand(n int, p ParameterFunc, q QuotationFunc) (string, []interface{}, error) {
-	return Expand(o.e, false, n, p, q)
+func (o Operand) Expand(s Starter, i int) (string, []interface{}, error) {
+	return Expand(o.e, false, s, i)
 }
 
 func E2O(e Expression) Operand {

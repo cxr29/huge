@@ -91,8 +91,9 @@ func notAllow(r rune) bool {
 	switch r {
 	case '\u0000', '"', '\'', '\\', '`', '\uFFFD':
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func isDigit(r rune) bool {
@@ -109,32 +110,6 @@ func isLower(r rune) bool {
 
 func isLetter(r rune) bool {
 	return isLower(r) || isUpper(r)
-}
-
-func Parameter(i int, n bool) string {
-	if n || i < 0 {
-		return ""
-	}
-	return "?"
-}
-
-func Quotation(s string) string {
-	if s[0] == '\'' {
-		return s
-	}
-	a := s[1 : len(s)-1]
-	if len(a) == 0 || len(a) > maxLen {
-		return ""
-	}
-	for _, r := range a {
-		if notAllow(r) {
-			return ""
-		}
-	}
-	if s[0] == '"' {
-		return s
-	}
-	return `"` + a + `"`
 }
 
 func init() {

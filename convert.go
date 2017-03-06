@@ -140,8 +140,6 @@ func convertAll(collapse, encoding bool, dst interface{}, v reflect.Value, t *Ta
 			var ok bool
 			if y, ok = c.field(v); !ok {
 				return c.errGet()
-			} else if c.canNil() && y.IsNil() {
-				return c.errNil()
 			}
 		case reflect.Slice:
 			y = x.Index(i)

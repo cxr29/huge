@@ -12,13 +12,40 @@ import (
 	"strings"
 )
 
+const meta = "\"$'?`"
+
+var marks = [...]string{
+	"double quote",
+	"dollar sign",
+	"single quote",
+	"question mark",
+	"back quote",
+}
+
+type Expression interface {
+	Expand(Starter, int) (string, []interface{}, error)
+}
+
+func Expand(e Expression, omitempty bool, s Starter, i int) (q string, a []interface{}, err error) {
+	if e == nil {
+		err = errors.New("nil expression")
+	} else if q, a, err = e.Expand(s, i); err == nil {
+		if len(q) < len(a) {
+			err = fmt.Errorf("malformed expression: %v", e)
+		} else if len(q) == 0 && !omitempty {
+			err = fmt.Errorf("empty expression: %v", e)
+		}
+	}
+	return
+}
+
 type none string
 
 func (e none) Error() string {
 	return string(e)
 }
 
-func (e none) Expand(int, ParameterFunc, QuotationFunc) (string, []interface{}, error) {
+func (e none) Expand(Starter, int) (string, []interface{}, error) {
 	return "", nil, e
 }
 
@@ -28,7 +55,7 @@ func nonef(format string, a ...interface{}) none {
 
 type empty string
 
-func (e empty) Expand(int, ParameterFunc, QuotationFunc) (string, []interface{}, error) {
+func (e empty) Expand(Starter, int) (string, []interface{}, error) {
 	return "", nil, nil
 }
 
@@ -36,17 +63,13 @@ type value struct {
 	i interface{}
 }
 
-func (v value) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []interface{}, err error) {
-	fp := Parameter
-	if p != nil {
-		fp = p
+func (v value) Expand(s Starter, i int) (q string, a []interface{}, err error) {
+	q = s.Parameter(true, i)
+	if len(q) == 0 {
+		q = s.Parameter(false, i)
 	}
-	s = fp(n, true)
-	if len(s) == 0 {
-		s = fp(n, false)
-	}
-	if len(s) == 0 {
-		err = fmt.Errorf("unsupported parameter:%d: %v", n, v.i)
+	if len(q) == 0 {
+		err = fmt.Errorf("unsupported parameter:%d: %v", i, v.i)
 	} else {
 		a = []interface{}{v.i}
 	}
@@ -55,7 +78,7 @@ func (v value) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []in
 
 type Literal string
 
-func (e Literal) Expand(int, ParameterFunc, QuotationFunc) (string, []interface{}, error) {
+func (e Literal) Expand(Starter, int) (string, []interface{}, error) {
 	return string(e), nil, nil
 }
 func (e Literal) And(a ...Condition) Condition {
@@ -74,13 +97,9 @@ func Literalf(format string, a ...interface{}) Literal {
 
 type Identifier string
 
-func (e Identifier) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, _ []interface{}, err error) {
-	fq := Quotation
-	if q != nil {
-		fq = q
-	}
-	s = fq(Quote(string(e), '"'))
-	if len(s) == 0 {
+func (e Identifier) Expand(s Starter, _ int) (q string, _ []interface{}, err error) {
+	q = s.Quote(string(e))
+	if len(q) == 0 {
 		err = errors.New("unsupported identifier: " + string(e))
 	}
 	return
@@ -88,17 +107,13 @@ func (e Identifier) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, _
 
 type Qualifier []string
 
-func (e Qualifier) Expand(n int, p ParameterFunc, q QuotationFunc) (string, []interface{}, error) {
+func (e Qualifier) Expand(s Starter, _ int) (string, []interface{}, error) {
 	if len(e) == 0 {
 		return "", nil, errors.New("empty qualifier")
 	}
-	fq := Quotation
-	if q != nil {
-		fq = q
-	}
 	a := make([]string, len(e))
 	for k, v := range e {
-		v = fq(Quote(string(v), '"'))
+		v = s.Quote(v)
 		if len(v) == 0 {
 			return "", nil, fmt.Errorf("unsupported qualifier: %v:%d", e, k)
 		}
@@ -112,18 +127,10 @@ type expression struct {
 	a []interface{}
 }
 
-func (e expression) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []interface{}, err error) {
+func (e expression) Expand(s Starter, i int) (q string, a []interface{}, err error) {
 	var b bytes.Buffer
-	var i, j, k, l int
+	var n, j, k, l int
 	m := make(map[int]int, len(e.a))
-	fp := Parameter
-	if p != nil {
-		fp = p
-	}
-	fq := Quotation
-	if q != nil {
-		fq = q
-	}
 	for j < len(e.s) {
 		k = strings.IndexByte(meta, e.s[j])
 		if k == -1 {
@@ -140,7 +147,7 @@ func (e expression) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a
 					if l < len(e.s) && e.s[l] == e.s[j] {
 						l++
 					} else {
-						s = fq(e.s[j:l])
+						q = s.Quoted(e.s[j:l])
 						j = l
 						break
 					}
@@ -149,10 +156,10 @@ func (e expression) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a
 				}
 			}
 			if j == l {
-				if len(s) == 0 {
+				if len(q) == 0 {
 					return "", nil, fmt.Errorf("unsupported %s: %s:%d %v", marks[k], e.s, j, e.a)
 				} else {
-					b.WriteString(s)
+					b.WriteString(q)
 				}
 			} else {
 				return "", nil, fmt.Errorf("unclosed %s: %s:%d %v", marks[k], e.s, j, e.a)
@@ -167,8 +174,8 @@ func (e expression) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a
 			}
 			h := j + 1
 			if h == l {
-				i++
-				h = i
+				n++
+				h = n
 			} else if e.s[h] == '0' {
 				return "", nil, fmt.Errorf("leading zero: %s:%d %v", e.s, j, e.a)
 			} else {
@@ -185,23 +192,23 @@ func (e expression) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a
 			}
 			if v, ok := e.a[h].(Expression); ok {
 				var d []interface{}
-				s, d, err = Expand(v, false, n+len(a), p, q)
+				q, d, err = Expand(v, false, s, i+len(a))
 				if err != nil {
 					return "", nil, err
 				}
-				b.WriteString(s)
+				b.WriteString(q)
 				a = append(a, d...)
 			} else {
-				s = fp(n+m[h], true)
-				if len(s) == 0 {
-					s = fp(n+len(a), false)
+				q = s.Parameter(true, i+m[h])
+				if len(q) == 0 {
+					q = s.Parameter(false, i+len(a))
 				} else {
 					ok = m[h] != len(a)
 				}
-				if len(s) == 0 {
-					return "", nil, fmt.Errorf("unsupported %s parameter:%d: %s:%d %v", marks[k], n+len(a), e.s, j, e.a)
+				if len(q) == 0 {
+					return "", nil, fmt.Errorf("unsupported %s parameter:%d: %s:%d %v", marks[k], i+len(a), e.s, j, e.a)
 				}
-				b.WriteString(s)
+				b.WriteString(q)
 				if !ok {
 					a = append(a, e.a[h])
 				}
@@ -217,19 +224,6 @@ func (e expression) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a
 		panic(false)
 	}
 	return b.String(), a, nil
-}
-
-func Expand(e Expression, omitempty bool, n int, p ParameterFunc, q QuotationFunc) (s string, a []interface{}, err error) {
-	if e == nil {
-		err = errors.New("nil expression")
-	} else if s, a, err = e.Expand(n, p, q); err == nil {
-		if len(s) < len(a) {
-			err = fmt.Errorf("malformed expression: %v", e)
-		} else if len(s) == 0 && !omitempty {
-			err = fmt.Errorf("empty expression: %v", e)
-		}
-	}
-	return
 }
 
 func V2E(i interface{}) Expression {

@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/cxr29/huge/query"
 )
+
+var sm, tm sync.RWMutex
 
 type Struct struct {
 	t    reflect.Type
@@ -20,7 +23,7 @@ type Struct struct {
 
 var structs = make(map[reflect.Type]*Struct)
 
-func newStruct(t reflect.Type) (*Struct, error) {
+func elemStruct(t reflect.Type) reflect.Type {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
@@ -30,15 +33,28 @@ func newStruct(t reflect.Type) (*Struct, error) {
 			t = t.Elem()
 		}
 	}
+	return t
+}
+
+func newStruct(t reflect.Type) (*Struct, error) {
+	t = elemStruct(t)
 	if t.Kind() != reflect.Struct {
 		panic("huge: type unsupported")
 	}
+	sm.RLock()
 	s, ok := structs[t]
+	sm.RUnlock()
 	if !ok {
+		sm.Lock()
+		defer sm.Unlock()
+		s, ok = structs[t]
+		if ok {
+			return s, nil
+		}
 		s = &Struct{t: t}
-		structs[t] = s
+		structs[s.t] = s
 		if err := s.fire(); err != nil {
-			delete(structs, t)
+			delete(structs, s.t)
 			return nil, err
 		}
 	}
@@ -56,16 +72,23 @@ func (s *Struct) fire() error {
 		if t == "-" {
 			continue
 		}
-		e, t, o := parseOptions(f.Type, t)
+		e, t, o, size := parseOptions(f.Type, t)
 		if len(e) > 0 {
 			return fmt.Errorf("huge: struct %s field:%d %s: %s", s.name, i+1, f.Name, e)
 		}
-		v := &Field{t: f.Type, o: o, i: i, belong: s, name: f.Name, alias: t}
+		v := &Field{t: f.Type, o: o, i: i, size: size, belong: s, name: f.Name, alias: t}
 		if v.IsInline() || v.IsOne() || v.IsMany() {
-			var err error
-			if v.own, err = newStruct(v.t); err != nil {
-				return err
+			t := elemStruct(v.t)
+			s, ok := structs[t]
+			if !ok {
+				s = &Struct{t: t}
+				structs[s.t] = s
+				if err := s.fire(); err != nil {
+					delete(structs, s.t)
+					return err
+				}
 			}
+			v.own = s
 		}
 		s.a = append(s.a, v)
 		v.j = len(s.a)
@@ -73,14 +96,9 @@ func (s *Struct) fire() error {
 	return nil
 }
 
-func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
-	t, ok := m[s.t]
-	if ok {
-		return t, nil
-	}
-	t = &Table{s: s}
-	t.Rename(s.name)
-	for _, f := range s.a {
+func (t *Table) fire() error {
+	t.Rename(t.s.name)
+	for _, f := range t.s.a {
 		if f.IsInline() {
 			fields := make([]*Field, 1, 5)
 			fields[0] = f
@@ -89,7 +107,7 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 					if a[i].IsInline() {
 						for _, j := range fields {
 							if j == a[i] || (j.own.t == a[i].own.t && j.i == a[i].i) {
-								return nil, fmt.Errorf("huge: struct %s field:%d %s: inline circle", s.name, f.i+1, f.name)
+								return fmt.Errorf("huge: struct %s field:%d %s: inline circle", t.s.name, f.i+1, f.name)
 							}
 						}
 						fields = append(fields, a[i])
@@ -137,13 +155,16 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 			panic(false)
 		}
 		if !static {
+			if f.Is(oUnique) {
+				c.o |= oUnique
+			}
 			for _, u := range [...]uint{oAutoIncrement, oAutoNow, oAutoNowAdd, oPrimaryKey, oVersion} {
 				if f.Is(u) {
 					if f.IsMany() {
 						panic(false)
 					}
 					if _, ok := t.o[u]; ok {
-						return nil, fmt.Errorf("huge: table %s: duplicate option %s", t.Name, option(u))
+						return fmt.Errorf("huge: table %s: duplicate option %s", t.Name, option(u))
 					} else {
 						t.o[u] = c.i
 					}
@@ -151,18 +172,20 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 			}
 		}
 		if f.IsOne() || f.IsMany() {
-			r, err := newStruct(f.t)
-			if err == nil {
-				if m == nil {
-					m = map[reflect.Type]*Table{s.t: t}
-				} else {
-					m[s.t] = t
-				}
-				c.r, err = r.bomb(m)
-			}
+			s, err := newStruct(f.t)
 			if err != nil {
-				return nil, err
+				return err
 			}
+			r, ok := tables[s.t]
+			if !ok {
+				r = &Table{s: s}
+				tables[r.s.t] = r
+				if err = r.fire(); err != nil {
+					delete(tables, r.s.t)
+					return err
+				}
+			}
+			c.r = r
 		}
 		if !f.IsMany() {
 			if len(f.alias) > 0 {
@@ -176,7 +199,7 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 				c.Rename(strings.Join(a, ""))
 				k := strings.ToLower(c.Name)
 				if _, ok := t.m[k]; ok {
-					return nil, fmt.Errorf("huge: table %s: duplicate column name: %s", t.Name, k)
+					return fmt.Errorf("huge: table %s: duplicate column name: %s", t.Name, k)
 				} else {
 					t.m[k] = c.i
 				}
@@ -199,7 +222,7 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 		if f := c.last(); f.IsOne() {
 			for r, m := c.r, map[reflect.Type]struct{}{c.r.s.t: struct{}{}}; ; {
 				if i, ok := r.o[oPrimaryKey]; !ok {
-					return nil, fmt.Errorf("huge: table %s column:%d %s: table %s must have a primary key",
+					return fmt.Errorf("huge: table %s column:%d %s: table %s must have a primary key",
 						t.Name, c.first().i+1, c.first().name, r.Name)
 				} else {
 					c.a = append(c.a, r.a[i].a...)
@@ -208,7 +231,7 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 						if _, ok := m[r.s.t]; ok {
 							for _, u := range [...]uint{oForeignKey, oManyToOne, oOneToOne} {
 								if f.Is(u) {
-									return nil, fmt.Errorf("huge: table %s column:%d %s: %s circle",
+									return fmt.Errorf("huge: table %s column:%d %s: %s circle",
 										t.Name, c.first().i+1, c.first().name, option(u))
 								}
 							}
@@ -237,16 +260,24 @@ func (s *Struct) bomb(m map[reflect.Type]*Table) (*Table, error) {
 			c.Operand = query.IQ(c.Name)
 			k := strings.ToLower(c.Name)
 			if _, ok := t.m[k]; ok {
-				return nil, fmt.Errorf("huge: table %s: duplicate column name: %s", t.Name, k)
+				return fmt.Errorf("huge: table %s: duplicate column name: %s", t.Name, k)
 			} else {
 				t.m[k] = c.i
 			}
 		}
 	}
 	for _, c := range t.a {
+		if f := c.last(); f.IsMany() {
+			if t := f.Type(); t.Kind() == reflect.Map {
+				if k := c.r.PrimaryKey(); k == nil || k.last().t != t.Key() {
+					return fmt.Errorf("huge: struct %s field:%d %s: table %s must have the map's key type primary key",
+						f.belong.name, f.i+1, f.name, c.r.Name)
+				}
+			}
+		}
 		c.cache()
 	}
-	return t, nil
+	return nil
 }
 
 var tables = make(map[reflect.Type]*Table)
@@ -305,13 +336,22 @@ func newTableBy(t reflect.Type) *Table {
 	if err != nil {
 		panic(err)
 	}
+	tm.RLock()
 	v, ok := tables[s.t]
+	tm.RUnlock()
 	if !ok {
-		v, err = s.bomb(nil)
-		if err != nil {
+		tm.Lock()
+		defer tm.Unlock()
+		v, ok = tables[s.t]
+		if ok {
+			return v
+		}
+		v = &Table{s: s}
+		tables[v.s.t] = v
+		if err := v.fire(); err != nil {
+			delete(tables, v.s.t)
 			panic(err)
 		}
-		tables[s.t] = v
 	}
 	return v
 }
@@ -535,4 +575,81 @@ func (t *Table) errNoColumns() error {
 }
 func (t *Table) errNoPrimaryKey() error {
 	return t.err("no primary key")
+}
+func (t *Table) errUnsupported() error {
+	return t.err("unsupported name")
+}
+
+func CreateTable(i interface{}, s query.Starter, temporary, ifNotExists bool) string {
+	q, err := NewTable(i).CreateTable(s, temporary, ifNotExists)
+	if err != nil {
+		panic(err)
+	}
+	return q
+}
+
+func (t *Table) CreateTable(s query.Starter, temporary, ifNotExists bool) (string, error) {
+	tableName := s.Quote(t.Name)
+	if len(tableName) == 0 {
+		return "", t.errUnsupported()
+	}
+	columns := make([]string, 0, len(t.a))
+	a := make([]string, 0, 6)
+	for _, c := range t.a {
+		if c.isMany() {
+			continue
+		}
+		columnName := s.Quote(c.Name)
+		if len(columnName) == 0 {
+			return "", c.errUnsupported()
+		}
+		a = append(a, columnName)
+		f := c.last()
+		goType := f.typeName()
+		option := query.OptionZeroValue
+		if c.isAutoIncrement() {
+			option = query.OptionAutoIncrement
+		} else if c.isAutoNow() {
+			option = query.OptionAutoNow
+		} else if c.isAutoNowAdd() {
+			option = query.OptionAutoNowAdd
+		} else if c.isVersion() {
+			option = query.OptionVersion
+		}
+		dbType, optionValue := s.Mapping(goType, f.size, option)
+		if len(dbType) == 0 {
+			return "", c.err("unsupported type: " + goType)
+		}
+		a = append(a, dbType)
+		if c.isPrimaryKey() {
+			a = append(a, "PRIMARY KEY")
+		} else {
+			if !(c.canNil() || c.isCollapse()) ||
+				(option == query.OptionZeroValue && len(optionValue) > 0) {
+				a = append(a, "NOT NULL")
+			}
+			if c.is(oUnique) {
+				a = append(a, "UNIQUE")
+			}
+		}
+		if len(optionValue) > 0 {
+			if option == query.OptionZeroValue {
+				a = append(a, "DEFAULT")
+			}
+			a = append(a, optionValue)
+		}
+		columns = append(columns, strings.Join(a, " "))
+		a = a[:0]
+	}
+	if len(columns) == 0 {
+		return "", t.errNoColumns()
+	}
+	c, ok := reflect.New(t.s.t).Interface().(query.Creater)
+	if !ok {
+		c, ok = s.(query.Creater)
+	}
+	if ok {
+		return c.CreateTable(tableName, columns, temporary, ifNotExists), nil
+	}
+	return query.CreateTable(tableName, columns, temporary, ifNotExists), nil
 }

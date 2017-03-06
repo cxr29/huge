@@ -25,9 +25,13 @@ func (h Huge) Update(i interface{}, columns ...string) (interface{}, error) {
 	if a.Empty() {
 		return nil, t.errNoColumns()
 	}
-	var returning query.Expression
-	if c := t.Version(); c != nil && h.ReturningFunc != nil {
-		returning = h.ReturningFunc('u', c.Operand)
+	var returning string
+	if c := t.Version(); c != nil {
+		if name := h.Starter.Quote(c.Name); len(name) == 0 {
+			return nil, c.errUnsupported()
+		} else {
+			returning = h.Starter.Returning('u', name)
+		}
 	}
 	s := make([]*sql.Stmt, 2)
 	defer func() {
@@ -40,7 +44,7 @@ func (h Huge) Update(i interface{}, columns ...string) (interface{}, error) {
 	return h.update(returning, s, t, a, v)
 }
 
-func (h Huge) update(returning query.Expression, s []*sql.Stmt, t *Table, a Columns, v reflect.Value) (_ interface{}, err error) {
+func (h Huge) update(returning string, s []*sql.Stmt, t *Table, a Columns, v reflect.Value) (_ interface{}, err error) {
 	now := time.Now()
 	var b bool
 	switch v.Kind() {
@@ -73,7 +77,7 @@ func (h Huge) update(returning query.Expression, s []*sql.Stmt, t *Table, a Colu
 	return h.update1(returning, s, t, a, v, now)
 }
 
-func (h Huge) update1(returning query.Expression, s []*sql.Stmt, t *Table, a Columns, v reflect.Value, now time.Time) (_ bool, err error) {
+func (h Huge) update1(returning string, s []*sql.Stmt, t *Table, a Columns, v reflect.Value, now time.Time) (_ bool, err error) {
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			return false, t.errNil()
@@ -88,7 +92,7 @@ func (h Huge) update1(returning query.Expression, s []*sql.Stmt, t *Table, a Col
 		}
 		var i interface{}
 		if c.isAutoNow() {
-			if i = c.convertTime(h.TimePrecision, now); i == nil {
+			if i = c.convertTime(now, h.TimePrec); i == nil {
 				return false, c.errSet()
 			}
 		} else if i, err = c.get(v); err != nil {
@@ -120,15 +124,15 @@ func (h Huge) update1(returning query.Expression, s []*sql.Stmt, t *Table, a Col
 			where.And(t.Version().Eq(k))
 		}
 		q := query.Q(query.Update(t.Name), set, where)
-		if returning != nil {
-			q.Append(returning)
+		if len(returning) > 0 {
+			q.Append(query.Literal(returning))
 		}
 		s[j], _, err = h.Prepare(q)
 		if err != nil {
 			return
 		}
 	}
-	if returning != nil {
+	if len(returning) > 0 {
 		c := t.Version()
 		k, f, ok := c.scan(v)
 		if !ok {
@@ -139,7 +143,7 @@ func (h Huge) update1(returning query.Expression, s []*sql.Stmt, t *Table, a Col
 		} else if err == nil && f != nil {
 			err = f()
 		}
-		if c = t.AutoNow(); err == nil && c != nil && !c.setTime(v, h.TimePrecision, now) {
+		if c = t.AutoNow(); err == nil && c != nil && !c.setTime(v, now, h.TimePrec) {
 			err = c.errSet()
 		}
 		return err == nil, err
@@ -159,7 +163,7 @@ func (h Huge) update1(returning query.Expression, s []*sql.Stmt, t *Table, a Col
 		if i > 0 && !c.setInteger(v, i+1) {
 			return false, c.errSet()
 		}
-		if c = t.AutoNow(); c != nil && !c.setTime(v, h.TimePrecision, now) {
+		if c = t.AutoNow(); c != nil && !c.setTime(v, now, h.TimePrec) {
 			return false, c.errSet()
 		}
 		return true, nil

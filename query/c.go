@@ -8,17 +8,24 @@ import (
 	"bytes"
 )
 
+type Condition interface {
+	Expression
+	And(...Condition) Condition
+	Not() Condition
+	Or(...Condition) Condition
+}
+
 type condition struct {
 	n bool
 	e Expression
 }
 
-func (c condition) Expand(n int, p ParameterFunc, q QuotationFunc) (string, []interface{}, error) {
-	s, a, err := Expand(c.e, false, n, p, q)
+func (c condition) Expand(s Starter, i int) (q string, a []interface{}, err error) {
+	q, a, err = Expand(c.e, false, s, i)
 	if err == nil && c.n {
-		s = "NOT (" + s + ")"
+		q = "NOT (" + q + ")"
 	}
-	return s, a, err
+	return
 }
 
 func (c condition) Not() Condition {
@@ -39,9 +46,6 @@ type logic struct {
 }
 
 func (l logic) Not() Condition {
-	if len(l.a) == 0 {
-		return logic{o: !l.o}
-	}
 	c := logic{!l.o, make([]Condition, len(l.a))}
 	for k, v := range l.a {
 		c.a[k] = v.Not()
@@ -88,7 +92,7 @@ func logic2(o bool, a []Condition, b []Condition) Condition {
 	return newLogic(o, c)
 }
 
-func (l logic) Expand(n int, p ParameterFunc, q QuotationFunc) (string, []interface{}, error) {
+func (l logic) Expand(s Starter, i int) (string, []interface{}, error) {
 	if len(l.a) == 0 {
 		n := none("empty ")
 		if l.o {
@@ -101,7 +105,7 @@ func (l logic) Expand(n int, p ParameterFunc, q QuotationFunc) (string, []interf
 	var a []interface{}
 	var b bytes.Buffer
 	for k, v := range l.a {
-		c, d, err := Expand(v, false, n+len(a), p, q)
+		c, d, err := Expand(v, false, s, i+len(a))
 		if err != nil {
 			return "", nil, err
 		}
@@ -145,26 +149,26 @@ func Or(a ...Condition) Condition {
 
 type Logic struct {
 	s string
-	c Condition
+	C Condition
 }
 
 func (l *Logic) Empty() bool {
-	return l.c == nil
+	return l.C == nil
 }
 
 func (l *Logic) Not() *Logic {
-	if l.c != nil {
-		l.c = l.c.Not()
+	if l.C != nil {
+		l.C = l.C.Not()
 	}
 	return l
 }
 
 func (l *Logic) And(a ...Condition) *Logic {
 	if len(a) > 0 {
-		if l.c != nil {
-			l.c = l.c.And(a...)
+		if l.C != nil {
+			l.C = l.C.And(a...)
 		} else {
-			l.c = And(a...)
+			l.C = And(a...)
 		}
 	}
 	return l
@@ -172,20 +176,20 @@ func (l *Logic) And(a ...Condition) *Logic {
 
 func (l *Logic) Or(a ...Condition) *Logic {
 	if len(a) > 0 {
-		if l.c != nil {
-			l.c = l.c.Or(a...)
+		if l.C != nil {
+			l.C = l.C.Or(a...)
 		} else {
-			l.c = Or(a...)
+			l.C = Or(a...)
 		}
 	}
 	return l
 }
 
-func (l *Logic) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []interface{}, err error) {
-	if l.c != nil {
-		s, a, err = Expand(l.c, false, n, p, q)
+func (l *Logic) Expand(s Starter, i int) (q string, a []interface{}, err error) {
+	if l.C != nil {
+		q, a, err = Expand(l.C, false, s, i)
 		if err == nil {
-			s = l.s + s
+			q = l.s + q
 		}
 	}
 	return

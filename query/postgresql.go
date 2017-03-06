@@ -5,27 +5,32 @@
 package query
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
-func PostgreSQLReturning(a byte, o Operand) Expression {
-	return E("RETURNING ?", o)
+type PostgreSQL struct{}
+
+var (
+	PostgreSQLStarter         = PostgreSQL{}
+	_                 Starter = PostgreSQLStarter
+)
+
+func (PostgreSQL) Dialect() string {
+	return "postgres"
 }
 
-func PostgreSQLParameter(i int, n bool) string {
-	if n && i > 0 {
+func (PostgreSQL) Parameter(n bool, i int) string {
+	if n {
 		return "$" + strconv.Itoa(i)
+	} else {
+		return ""
 	}
-	return ""
 }
 
-func PostgreSQLQuotation(s string) string {
-	if s[0] == '\'' {
-		return s
-	}
-	s = s[1 : len(s)-1]
+func (PostgreSQL) Quote(s string) string {
 	if len(s) == 0 || len(s) > maxLen {
 		return ""
 	}
@@ -41,15 +46,91 @@ func PostgreSQLQuotation(s string) string {
 	}
 	if !q {
 		r, _ := utf8.DecodeRuneInString(s)
-		q = !isLetter(r) && r != '_'
+		q = !isLower(r) && r != '_'
 	}
 	if !q {
 		q = IsKeyword(PostgreSQLKeywords, s)
 	}
 	if q {
-		s = `"` + s + `"`
+		return `"` + s + `"`
+	} else {
+		return s
 	}
-	return s
+}
+
+func (postgresql PostgreSQL) Quoted(s string) string {
+	if s[0] == '\'' {
+		return s
+	} else {
+		return postgresql.Quote(s[1 : len(s)-1])
+	}
+}
+
+func (PostgreSQL) Returning(b byte, c string) string {
+	return "RETURNING " + c
+}
+
+func (PostgreSQL) Mapping(goType string, maxSize, option int) (_ string, optionValue string) {
+	switch option {
+	case OptionAutoIncrement:
+		switch goType {
+		case "int64", "uint64":
+			return "BIGSERIAL", ""
+		default:
+			return "SERIAL", ""
+		}
+	case OptionAutoNow, OptionAutoNowAdd:
+		switch goType {
+		case "int32", "int", "uint32", "uint":
+			optionValue = "DEFAULT CAST(EXTRACT(epoch FROM CURRENT_TIMESTAMP) AS INTEGER)"
+		case "int64", "uint64":
+			optionValue = "DEFAULT CAST(EXTRACT(epoch FROM CURRENT_TIMESTAMP) * 1000 AS BIGINT)"
+		default:
+			optionValue = "DEFAULT CURRENT_TIMESTAMP"
+		}
+	case OptionVersion:
+		optionValue = "DEFAULT 1"
+	}
+	switch goType {
+	case "bool":
+		return "BOOLEAN", "FALSE"
+	case "int", "int8", "int16", "int32", "uint", "uint8", "uint16", "uint32":
+		if option == OptionZeroValue {
+			optionValue = "0"
+		}
+		return "INTEGER", optionValue
+	case "int64", "uint64":
+		if option == OptionZeroValue {
+			optionValue = "0"
+		}
+		return "BIGINT", optionValue
+	case "float32":
+		return "REAL", "0"
+	case "float64":
+		return "DOUBLE PRECISION", "0"
+	case "time":
+		if option == OptionZeroValue {
+			optionValue = "'1970-01-01T00:00:00Z'"
+		}
+		return "TIMESTAMP WITH TIME ZONE", optionValue
+	case "bytes", "gob":
+		return "BYTEA", ""
+	case "json":
+		return "JSONB", ""
+	case "xml":
+		return "XML", ""
+	case "string": // interface
+		optionValue = "''"
+		fallthrough
+	default:
+		if maxSize == 0 {
+			return "VARCHAR(255)", optionValue
+		} else if maxSize > 0 && maxSize <= 255 {
+			return fmt.Sprintf("VARCHAR(%d)", maxSize), optionValue
+		} else {
+			return "TEXT", optionValue
+		}
+	}
 }
 
 var PostgreSQLKeywords = strings.Split(strings.ToUpper(`A

@@ -11,6 +11,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/cxr29/huge/query"
@@ -34,6 +35,7 @@ const (
 	oPointer
 	oPrimaryKey
 	oScanner
+	oUnique
 	oValuer
 	oVersion
 	oXML
@@ -62,6 +64,7 @@ var options = map[string]struct {
 	"one_to_many":    {oOneToMany, 'r', isStructs},
 	"one_to_one":     {oOneToOne, 'r', isStruct},
 	"primary_key":    {oPrimaryKey, 'p', nil},
+	"unique":         {oUnique, 'u', nil},
 	"version":        {oVersion, 'a', isIntegers},
 	"xml":            {oXML, 'e', nil},
 }
@@ -75,7 +78,7 @@ func option(u uint) string {
 	panic(false)
 }
 
-func parseOptions(t reflect.Type, s string) (e, n string, u uint) {
+func parseOptions(t reflect.Type, s string) (e, n string, u uint, size int) {
 	if s == "-" {
 		panic(false)
 	}
@@ -97,8 +100,13 @@ func parseOptions(t reflect.Type, s string) (e, n string, u uint) {
 		if k == 0 {
 			n = v
 		} else if o, ok := options[v]; !ok {
-			e = fmt.Sprintf("unsupported option: %s", v)
-			return
+			if i, err := strconv.Atoi(v); err == nil {
+				size = i
+				continue
+			} else {
+				e = fmt.Sprintf("unsupported option: %s", v)
+				return
+			}
 		} else if u&o.u == o.u {
 			e = fmt.Sprintf("duplicate option %s", v)
 			return
@@ -132,7 +140,7 @@ func parseOptions(t reflect.Type, s string) (e, n string, u uint) {
 type Field struct {
 	t           reflect.Type
 	o           uint
-	i, j        int
+	i, j, size  int
 	belong, own *Struct
 	name, alias string
 }
@@ -162,6 +170,10 @@ func (f *Field) IsOne() bool {
 }
 
 func (f *Field) CanNil() bool {
+	switch f.t {
+	case typeNullBool, typeNullInt64, typeNullFloat64, typeNullString:
+		return true
+	}
 	return canNil(f.t.Kind())
 }
 
@@ -267,11 +279,10 @@ func (c *Column) cache() {
 	if c._isAutoNowAdd() {
 		c.o |= oAutoNowAdd
 	}
-	if c._isCollapse() {
-		c.o |= oCollapse
-	}
 	if c._isPrimaryKey() {
 		c.o |= oPrimaryKey
+	} else if c._isCollapse() {
+		c.o |= oCollapse
 	}
 	if c._isVersion() {
 		c.o |= oVersion
@@ -485,4 +496,76 @@ func (c *Column) errZero() error {
 }
 func (c *Column) errDuplicate() error {
 	return c.err("duplicate")
+}
+func (c *Column) errUnsupported() error {
+	return c.err("unsupported name")
+}
+
+func (f *Field) typeName() string {
+	if !f.Is(oValuer) {
+		if f.Is(oGob) {
+			return "gob"
+		} else if f.Is(oJSON) {
+			return "json"
+		} else if f.Is(oXML) {
+			return "xml"
+		}
+	}
+	return typeName(f.t)
+}
+
+func typeName(t reflect.Type) string {
+	k := t.Kind()
+	if k == reflect.Ptr {
+		return typeName(t.Elem())
+	}
+	switch t {
+	case typeTime:
+		return "time"
+	case typeInterface:
+		return "interface"
+	case typeNullBool:
+		return "bool"
+	case typeNullInt64:
+		return "int64"
+	case typeNullFloat64:
+		return "float64"
+	case typeNullString:
+		return "string"
+	}
+	switch k {
+	case reflect.Bool:
+		return "bool"
+	case reflect.Int:
+		return "int"
+	case reflect.Int8:
+		return "int8"
+	case reflect.Int16:
+		return "int16"
+	case reflect.Int32:
+		return "int32"
+	case reflect.Int64:
+		return "int64"
+	case reflect.Uint:
+		return "uint"
+	case reflect.Uint8:
+		return "uint8"
+	case reflect.Uint16:
+		return "uint16"
+	case reflect.Uint32:
+		return "uint32"
+	case reflect.Uint64:
+		return "uint64"
+	case reflect.Float32:
+		return "float32"
+	case reflect.Float64:
+		return "float64"
+	case reflect.String:
+		return "string"
+	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return "bytes"
+		}
+	}
+	return "@" + t.Name()
 }

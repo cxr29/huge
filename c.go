@@ -71,10 +71,12 @@ func (h Huge) Create(i interface{}) (interface{}, error) {
 	}
 	returning := false
 	q := query.Q(query.Insert(t.Name), values)
-	if c := t.AutoIncrement(); c != nil && h.ReturningFunc != nil {
-		if r := h.ReturningFunc('c', c.Operand); r != nil {
+	if c := t.AutoIncrement(); c != nil {
+		if name := h.Starter.Quote(c.Name); len(name) == 0 {
+			return nil, c.errUnsupported()
+		} else if s := h.Starter.Returning('c', name); len(s) > 0 {
 			returning = true
-			q.Append(r)
+			q.Append(query.Literal(s))
 		}
 	}
 	s, _, err := h.Prepare(q)
@@ -132,7 +134,7 @@ func (h Huge) create1(returning bool, s *sql.Stmt, t *Table, v reflect.Value, no
 				return c.errSet()
 			}
 		} else if c.isAutoNow() || c.isAutoNowAdd() {
-			if i = c.convertTime(h.TimePrecision, now); i == nil {
+			if i = c.convertTime(now, h.TimePrec); i == nil {
 				return c.errSet()
 			}
 		} else if i, err = c.get(v); err != nil {
@@ -147,12 +149,12 @@ func (h Huge) create1(returning bool, s *sql.Stmt, t *Table, v reflect.Value, no
 			}
 		}
 		if c := t.AutoNow(); c != nil {
-			if !c.setTime(v, h.TimePrecision, now) {
+			if !c.setTime(v, now, h.TimePrec) {
 				return c.errSet()
 			}
 		}
 		if c := t.AutoNowAdd(); c != nil {
-			if !c.setTime(v, h.TimePrecision, now) {
+			if !c.setTime(v, now, h.TimePrec) {
 				return c.errSet()
 			}
 		}

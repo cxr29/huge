@@ -8,8 +8,8 @@ type join struct {
 	e Expression
 }
 
-func (a *join) Expand(n int, p ParameterFunc, q QuotationFunc) (string, []interface{}, error) {
-	return Expand(a.e, false, n, p, q)
+func (a *join) Expand(s Starter, i int) (string, []interface{}, error) {
+	return Expand(a.e, false, s, i)
 }
 
 func (a *join) Join(operator string, b interface{}) *joinC {

@@ -136,7 +136,7 @@ func (h Huge) rud(b byte, primaryKeys, row interface{}, columns []string) (_ int
 			return
 		}
 		var r *sql.Rows
-		r, err = h.querier.Query(s, a...)
+		r, err = h.Querier.Query(s, a...)
 		if err != nil {
 			return
 		}
@@ -212,7 +212,7 @@ func (h Huge) rud(b byte, primaryKeys, row interface{}, columns []string) (_ int
 			} else {
 				var i interface{}
 				if c.isAutoNow() {
-					if i = c.convertTime(h.TimePrecision, now); i == nil {
+					if i = c.convertTime(now, h.TimePrec); i == nil {
 						return nil, 0, c.errSet()
 					}
 				} else if i, err = c.get(v); err != nil {
@@ -231,7 +231,7 @@ func (h Huge) rud(b byte, primaryKeys, row interface{}, columns []string) (_ int
 				if i > 0 && !c.setInteger(v, i+1) {
 					return nil, 0, c.errSet()
 				}
-				if c = t.AutoNow(); c != nil && !c.setTime(v, h.TimePrecision, now) {
+				if c = t.AutoNow(); c != nil && !c.setTime(v, now, h.TimePrec) {
 					return nil, 0, c.errSet()
 				}
 			}

@@ -5,35 +5,69 @@
 package query
 
 import (
+	"fmt"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
-func MySQLParameter(i int, n bool) string {
-	if n || i < 0 {
-		return ""
-	}
-	return "?"
+type MySQL struct {
+	Engine   string
+	Charset  string
+	Collate  string
+	ZeroTime string
 }
 
-func MySQLQuotation(s string) string {
-	if s[0] == '\'' {
-		return s
+var (
+	MySQLStarter         = MySQL{ZeroTime: time.Unix(0, 0).Local().Format("'2006-01-02 15:04:05'")}
+	_            Starter = MySQLStarter
+)
+
+func (mysql MySQL) CreateTable(tableName string, columns []string, temporary, ifNotExists bool) string {
+	b := CreateTableBuffer(tableName, columns, temporary, ifNotExists)
+	if len(mysql.Engine) > 0 {
+		b.WriteString(" ENGINE=")
+		b.WriteString(mysql.Engine)
 	}
-	s = s[1 : len(s)-1]
+	if len(mysql.Charset) > 0 {
+		b.WriteString(" CHARACTER SET ")
+		b.WriteString(mysql.Charset)
+	}
+	if len(mysql.Collate) > 0 {
+		b.WriteString(" COLLATE ")
+		b.WriteString(mysql.Collate)
+	}
+	b.WriteString(";\n")
+	return b.String()
+}
+
+func (MySQL) Dialect() string {
+	return "mysql"
+}
+
+func (MySQL) Parameter(n bool, i int) string {
+	if n {
+		return ""
+	} else {
+		return "?"
+	}
+}
+
+func (MySQL) Returning(byte, string) string {
+	return ""
+}
+
+func (MySQL) Quote(s string) string {
 	if len(s) == 0 || len(s) > maxLen {
 		return ""
 	}
 	q := false
-	n := 0
 	for _, r := range s {
 		switch {
 		case notAllow(r):
 			return ""
-		case isDigit(r):
-			n++
-		case isLetter(r) || r == '$' || r == '_':
+		case isDigit(r) || isLetter(r) || r == '$' || r == '_':
 		case '\u0080' <= r && r <= '\uFFFF':
 		case '\u0001' <= r && r <= '\u007F':
 			q = true
@@ -41,20 +75,104 @@ func MySQLQuotation(s string) string {
 			return ""
 		}
 	}
-	if r, _ := utf8.DecodeLastRuneInString(s); unicode.IsSpace(r) || n == len(s) {
+	if r, _ := utf8.DecodeLastRuneInString(s); unicode.IsSpace(r) {
 		return ""
 	}
 	if !q {
 		r, _ := utf8.DecodeRuneInString(s)
-		q = isDigit(r)
+		q = unicode.IsDigit(r)
 	}
 	if !q {
 		q = IsKeyword(MySQLKeywords, s)
 	}
 	if q {
-		s = "`" + s + "`"
+		return "`" + s + "`"
+	} else {
+		return s
 	}
-	return s
+}
+
+func (mysql MySQL) Quoted(s string) string {
+	if s[0] == '\'' {
+		return s
+	} else {
+		return mysql.Quote(s[1 : len(s)-1])
+	}
+}
+
+var (
+	mysqlTypes = map[string][2]string{
+		"bool":    {"BOOLEAN", "FALSE"},
+		"int":     {"INT", "0"},
+		"int8":    {"TINYINT", "0"},
+		"int16":   {"SMALLINT", "0"},
+		"int32":   {"INT", "0"},
+		"int64":   {"BIGINT", "0"},
+		"uint":    {"INT UNSIGNED", "0"},
+		"uint8":   {"TINYINT UNSIGNED", "0"},
+		"uint16":  {"SMALLINT UNSIGNED", "0"},
+		"uint32":  {"INT UNSIGNED", "0"},
+		"uint64":  {"BIGINT UNSIGNED", "0"},
+		"float32": {"FLOAT", "0"},
+		"float64": {"DOUBLE", "0"},
+		// bytes, gob, interface, json, string, time, xml
+	}
+)
+
+func (mysql MySQL) Mapping(goType string, maxSize, option int) (string, string) {
+	a, ok := mysqlTypes[goType]
+	switch option {
+	case OptionAutoIncrement:
+		a[1] = "AUTO_INCREMENT"
+	case OptionAutoNow, OptionAutoNowAdd:
+		if goType != "time" {
+			a[1] = "DEFAULT 0"
+		}
+	case OptionVersion:
+		a[1] = "DEFAULT 1"
+	}
+	if !ok {
+		switch goType {
+		case "time":
+			switch option {
+			case OptionZeroValue:
+				a[1] = mysql.ZeroTime
+			case OptionAutoNow:
+				a[1] = "DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+			case OptionAutoNowAdd:
+				a[1] = "DEFAULT CURRENT_TIMESTAMP"
+			}
+			a[0] = "DATETIME"
+		case "bytes", "gob":
+			if maxSize > 0 && maxSize <= 255 {
+				a[0] = fmt.Sprintf("VARBINARY(%d)", maxSize)
+			} else if maxSize > 16777215 {
+				a[0] = "LONGBLOB"
+			} else if maxSize > 65535 {
+				a[0] = "MEDIUMBLOB"
+			} else {
+				a[0] = "BLOB"
+			}
+		case "json":
+			a[0] = "JSON"
+		case "string": // interface, xml
+			a[1] = "''"
+			fallthrough
+		default:
+			if maxSize == 0 {
+				a[0] = "VARCHAR(255)"
+			} else if maxSize > 0 && maxSize <= 255 {
+				a[0] = fmt.Sprintf("VARCHAR(%d)", maxSize)
+			} else if maxSize > 16777215 {
+				a[0] = "LONGTEXT"
+			} else if maxSize > 65535 {
+				a[0] = "MEDIUMTEXT"
+			} else {
+				a[0] = "TEXT"
+			}
+		}
+	}
+	return a[0], a[1]
 }
 
 var MySQLKeywords = strings.Split(strings.ToUpper(`ACCESSIBLE

@@ -5,25 +5,32 @@
 package query
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
-func SQLiteParameter(i int, n bool) string {
-	if i < 1 {
-		return ""
-	} else if n {
-		return "?" + strconv.Itoa(i)
-	}
-	return "?"
+type SQLite struct{}
+
+var (
+	SQLiteStarter         = SQLite{}
+	_             Starter = SQLiteStarter
+)
+
+func (SQLite) Dialect() string {
+	return "sqlite"
 }
 
-func SQLiteQuotation(s string) string {
-	if s[0] == '\'' {
-		return s
+func (SQLite) Parameter(n bool, i int) string {
+	if n {
+		return "?" + strconv.Itoa(i)
+	} else {
+		return "?"
 	}
-	s = s[1 : len(s)-1]
+}
+
+func (SQLite) Quote(s string) string {
 	if len(s) == 0 || len(s) > maxLen {
 		return ""
 	}
@@ -45,9 +52,66 @@ func SQLiteQuotation(s string) string {
 		q = IsKeyword(SQLiteKeywords, s)
 	}
 	if q {
-		s = `"` + s + `"`
+		return `"` + s + `"`
+	} else {
+		return s
 	}
-	return s
+}
+
+func (sqlite SQLite) Quoted(s string) string {
+	if s[0] == '\'' {
+		return s
+	} else {
+		return sqlite.Quote(s[1 : len(s)-1])
+	}
+}
+
+func (SQLite) Returning(byte, string) string {
+	return ""
+}
+
+func (SQLite) Mapping(goType string, maxSize, option int) (_ string, optionValue string) {
+	switch option {
+	case OptionAutoIncrement:
+		optionValue = "AUTOINCREMENT"
+	case OptionAutoNow, OptionAutoNowAdd:
+		if goType == "time" {
+			optionValue = "DEFAULT CURRENT_TIMESTAMP"
+		} else {
+			optionValue = "DEFAULT 0"
+		}
+	case OptionVersion:
+		optionValue = "DEFAULT 1"
+	}
+	switch goType {
+	case "bool":
+		return "BOOLEAN", "FALSE"
+	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64":
+		if option == OptionZeroValue {
+			optionValue = "0"
+		}
+		return "INTEGER", optionValue
+	case "float32", "float64":
+		return "REAL", "0"
+	case "time":
+		if option == OptionZeroValue {
+			optionValue = "'1970-01-01T00:00:00Z'"
+		}
+		return "DATETIME", optionValue
+	case "bytes", "gob":
+		return "BLOB", ""
+	case "string": // interface, json, xml
+		optionValue = "''"
+		fallthrough
+	default:
+		if maxSize == 0 {
+			return "VARCHAR(255)", optionValue
+		} else if maxSize > 0 && maxSize <= 255 {
+			return fmt.Sprintf("VARCHAR(%d)", maxSize), optionValue
+		} else {
+			return "TEXT", optionValue
+		}
+	}
 }
 
 var SQLiteKeywords = strings.Split(strings.ToUpper(`ABORT

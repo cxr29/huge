@@ -47,7 +47,7 @@ func (e *Query) As(s string) Expression {
 	return E("(?) AS ?", e, Identifier(s))
 }
 
-func (e *Query) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []interface{}, _ error) {
+func (e *Query) Expand(s Starter, i int) (q string, a []interface{}, _ error) {
 	if e.b == '*' && len(e.a) == 0 {
 		return e.s[0] + "*" + e.s[2], nil, nil
 	}
@@ -56,7 +56,7 @@ func (e *Query) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []i
 	var k int
 	b.WriteString(e.s[0])
 	for _, v := range e.a {
-		c, d, err := Expand(v, o, n+len(a), p, q)
+		c, d, err := Expand(v, o, s, i+len(a))
 		if err != nil {
 			return "", nil, err
 		} else if len(c) == 0 {
@@ -71,7 +71,7 @@ func (e *Query) Expand(n int, p ParameterFunc, q QuotationFunc) (s string, a []i
 	}
 	if k > 0 {
 		b.WriteString(e.s[2])
-		s = b.String()
+		q = b.String()
 	} else if !o {
 		return "", nil, nonef("empty query3: %v", e)
 	}
@@ -125,33 +125,33 @@ func (e *QueryS) Add(c string, i interface{}) *QueryS {
 	return e
 }
 
-func (e *QueryS) Expand(n int, p ParameterFunc, q QuotationFunc) (_ string, _ []interface{}, err error) {
+func (e *QueryS) Expand(s Starter, i int) (_ string, _ []interface{}, err error) {
 	if e.o {
 		err = nonef("odd query4: %v:%d", e, len(e.a))
 	} else if len(e.a) == 0 {
 		err = nonef("empty query4: %v", e)
 	} else if len(e.s) == 4 {
-		return e.expandS1(n, p, q)
+		return e.expandS1(s, i)
 	} else if len(e.s) == 5 {
-		return e.expandS2(n, p, q)
+		return e.expandS2(s, i)
 	} else {
 		err = nonef("malformed query4: %v", e)
 	}
 	return
 }
 
-func (e *QueryS) expandS1(n int, p ParameterFunc, q QuotationFunc) (string, []interface{}, error) {
+func (e *QueryS) expandS1(s Starter, i int) (string, []interface{}, error) {
 	var a []interface{}
 	var b bytes.Buffer
 	b.WriteString(e.s[0])
-	for i, v := range e.a {
-		c, d, err := Expand(V2E(v), false, n+len(a), p, q)
+	for k, v := range e.a {
+		c, d, err := Expand(V2E(v), false, s, i+len(a))
 		if err != nil {
 			return "", nil, err
 		}
-		if i%2 == 1 {
+		if k%2 == 1 {
 			b.WriteString(e.s[1])
-		} else if i > 0 {
+		} else if k > 0 {
 			b.WriteString(e.s[2])
 		}
 		b.WriteString(c)
@@ -161,17 +161,17 @@ func (e *QueryS) expandS1(n int, p ParameterFunc, q QuotationFunc) (string, []in
 	return b.String(), a, nil
 }
 
-func (e *QueryS) expandS2(n int, p ParameterFunc, q QuotationFunc) (_ string, _ []interface{}, err error) {
+func (e *QueryS) expandS2(s Starter, i int) (_ string, _ []interface{}, err error) {
 	var a []interface{}
 	var b bytes.Buffer
-	f := func(i int, s string) error {
-		for ; i < len(e.a); i += 2 {
-			c, d, err := Expand(V2E(e.a[i]), false, n+len(a), p, q)
+	f := func(j int, q string) error {
+		for ; j < len(e.a); j += 2 {
+			c, d, err := Expand(V2E(e.a[j]), false, s, i+len(a))
 			if err != nil {
 				return err
 			}
-			if i >= 2 {
-				b.WriteString(s)
+			if j >= 2 {
+				b.WriteString(q)
 			}
 			b.WriteString(c)
 			a = append(a, d...)
@@ -256,6 +256,10 @@ func Offset(n int) Expression {
 	}
 	return Literalf("OFFSET %d", n)
 }
+
+type x byte
+
+const X x = 'X'
 
 func (x) Values(a ...interface{}) *QueryS {
 	return Q3S2("(", ", ", ") VALUES (", ", ", ")", a...)

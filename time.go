@@ -12,22 +12,10 @@ import (
 	"time"
 )
 
-var precisions = [...]int{1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8}
-
-func LimitTime(p int, t time.Time) time.Time {
-	if p == 0 {
-		return time.Unix(t.Unix(), 0)
-	} else if 1 <= p && p <= 8 {
-		p = precisions[8-p]
-		return time.Unix(t.Unix(), int64(t.Nanosecond()/p*p))
-	}
-	return t
-}
-
-func (c *Column) convertTime(p int, t time.Time) interface{} {
+func (c *Column) convertTime(t time.Time, prec int) interface{} {
 	f := c.last()
 	if x := f.Type(); x == typeTime {
-		t = LimitTime(p, t)
+		t = LimitTime(t, prec)
 		if f.Is(oPointer) {
 			return &t
 		} else {
@@ -76,13 +64,13 @@ func (c *Column) convertTime(p int, t time.Time) interface{} {
 	return nil
 }
 
-func (c *Column) setTime(v reflect.Value, p int, t time.Time) bool {
+func (c *Column) setTime(v reflect.Value, t time.Time, prec int) bool {
 	if v, ok := c.field(v); ok {
 		var i interface{}
 		f := c.last()
 		x := f.Type()
 		if x == typeTime {
-			i = LimitTime(p, t)
+			i = LimitTime(t, prec)
 		} else {
 			switch x.Kind() {
 			case reflect.Int:
@@ -117,6 +105,23 @@ func (c *Column) setTime(v reflect.Value, p int, t time.Time) bool {
 		}
 	}
 	return false
+}
+
+func Now(prec int) time.Time {
+	return LimitTime(time.Now(), prec)
+}
+
+var precs = [...]int{1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8}
+
+func LimitTime(t time.Time, prec int) time.Time {
+	if prec == 0 {
+		return time.Unix(t.Unix(), 0)
+	} else if 1 <= prec && prec <= 8 {
+		prec = precs[8-prec]
+		return time.Unix(t.Unix(), int64(t.Nanosecond()/prec*prec))
+	} else {
+		return t
+	}
 }
 
 const (
@@ -166,10 +171,6 @@ func isDate(y, m, d int) bool {
 	return isYear(y) && isMonth(m) && 1 <= d && d <= maxMonthDay(m, isLeap(y))
 }
 
-func NowDate() int {
-	return ToDate(time.Now())
-}
-
 func splitDate(n int) (y, m, d int, x bool) {
 	x = n < 0
 	if x {
@@ -184,6 +185,10 @@ func splitDate(n int) (y, m, d int, x bool) {
 func IsDate(n int) bool {
 	y, m, d, _ := splitDate(n)
 	return isDate(y, m, d)
+}
+
+func NowDate() int {
+	return ToDate(time.Now())
 }
 
 func FromDate(n int) (t time.Time, ok bool) {

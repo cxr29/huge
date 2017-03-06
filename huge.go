@@ -26,55 +26,47 @@ type Querier interface {
 }
 
 type Huge struct {
-	driverName, dataSourceName    string
-	querier                       Querier
-	TimePrecision, FirstParameter int
-	ParameterFunc                 query.ParameterFunc
-	QuotationFunc                 query.QuotationFunc
-	TransformFunc                 query.TransformFunc
-	ReturningFunc                 query.ReturningFunc
+	Starter  query.Starter
+	Querier  Querier
+	DealName func(string) string
+	TimePrec int
 }
 
 func Open(driverName, dataSourceName string) (h Huge, err error) {
-	h.querier, err = sql.Open(driverName, dataSourceName)
-	h.TimePrecision, h.FirstParameter = 6, 1
+	h.Querier, err = sql.Open(driverName, dataSourceName)
 	switch driverName {
 	case "mysql":
-		h.TimePrecision = 0
-		h.ParameterFunc = query.MySQLParameter
-		h.QuotationFunc = query.MySQLQuotation
+		h.Starter = query.MySQLStarter
+		h.TimePrec = 0
 	case "postgres":
-		h.ParameterFunc = query.PostgreSQLParameter
-		h.QuotationFunc = query.PostgreSQLQuotation
-		h.ReturningFunc = query.PostgreSQLReturning
+		h.Starter = query.PostgreSQLStarter
+		h.TimePrec = 6
 	case "sqlite":
-		h.ParameterFunc = query.SQLiteParameter
-		h.QuotationFunc = query.SQLiteQuotation
+		h.Starter = query.SQLiteStarter
+		h.TimePrec = 9
+	default:
+		h.Starter = query.StandardStarter
+		h.TimePrec = 6
 	}
 	return
 }
 
 func (h Huge) Now() time.Time {
-	return LimitTime(h.TimePrecision, time.Now())
+	return h.LimitTime(time.Now())
+}
+func (h Huge) LimitTime(t time.Time) time.Time {
+	return LimitTime(t, h.TimePrec)
 }
 
-func (h Huge) DB() *sql.DB {
-	db, _ := h.querier.(*sql.DB)
-	return db
-}
-func (h Huge) Tx() *sql.Tx {
-	tx, _ := h.querier.(*sql.Tx)
-	return tx
-}
 func (h Huge) mustDB() *sql.DB {
-	db, ok := h.querier.(*sql.DB)
+	db, ok := h.Querier.(*sql.DB)
 	if !ok {
 		panic("huge: Querier is not sql.DB")
 	}
 	return db
 }
 func (h Huge) mustTx() *sql.Tx {
-	tx, ok := h.querier.(*sql.Tx)
+	tx, ok := h.Querier.(*sql.Tx)
 	if !ok {
 		panic("huge: Querier is not sql.Tx")
 	}
@@ -104,7 +96,7 @@ func (h Huge) Ping() error {
 }
 
 func (h Huge) Expand(q query.Expression) (string, []interface{}, error) {
-	s, a, err := query.Expand(q, false, h.FirstParameter, h.ParameterFunc, h.QuotationFunc)
+	s, a, err := query.Expand(q, false, h.Starter, 1)
 	log.Debugln(s, a)
 	log.ErrDebug(err)
 	return s, a, err
@@ -114,30 +106,30 @@ func (h Huge) Exec(q query.Expression) (sql.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return h.querier.Exec(s, a...)
+	return h.Querier.Exec(s, a...)
 }
 func (h Huge) Prepare(q query.Expression) (*sql.Stmt, []interface{}, error) {
 	s, a, err := h.Expand(q)
 	if err != nil {
 		return nil, nil, err
 	}
-	p, err := h.querier.Prepare(s)
+	p, err := h.Querier.Prepare(s)
 	return p, a, err
 }
 func (h Huge) Query(q query.Expression) *Rows {
 	var rows *sql.Rows
 	s, a, err := h.Expand(q)
 	if err == nil {
-		rows, err = h.querier.Query(s, a...)
+		rows, err = h.Querier.Query(s, a...)
 	}
-	return &Rows{err: err, rows: rows, TransformFunc: h.TransformFunc}
+	return &Rows{err, rows, h.DealName}
 }
 func (h Huge) Q(a ...query.Expression) *Rows {
 	return h.Query(query.Q(a...))
 }
 
 func (h Huge) Begin() (_ Huge, err error) {
-	h.querier, err = h.mustDB().Begin()
+	h.Querier, err = h.mustDB().Begin()
 	return h, err
 }
 func (h Huge) Commit() (err error) {

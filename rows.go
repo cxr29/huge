@@ -9,14 +9,13 @@ import (
 	"errors"
 	"reflect"
 
-	"github.com/cxr29/huge/query"
 	"github.com/cxr29/log"
 )
 
 type Rows struct {
-	err           error
-	rows          *sql.Rows
-	TransformFunc query.TransformFunc
+	err      error
+	rows     *sql.Rows
+	DealName func(string) string
 }
 
 func (r *Rows) Close() error {
@@ -56,8 +55,8 @@ func (r *Rows) scanArray(v reflect.Value) error {
 func (r *Rows) scanMap(columns []string, v reflect.Value) error {
 	m := make(map[string]int, len(columns))
 	for i, s := range columns {
-		if r.TransformFunc != nil {
-			s = r.TransformFunc(s)
+		if r.DealName != nil {
+			s = r.DealName(s)
 		}
 		if _, ok := m[s]; ok {
 			return errors.New("huge: duplicate column: " + s)
@@ -138,8 +137,8 @@ func (r *Rows) scanStruct(t *Table, columns []string, v reflect.Value) error {
 	a := make([]interface{}, len(columns))
 	f := make([]func() error, len(columns))
 	for i, s := range columns {
-		if r.TransformFunc != nil {
-			s = r.TransformFunc(s)
+		if r.DealName != nil {
+			s = r.DealName(s)
 		}
 		if c := t.Find(s); c == nil {
 			return errors.New("huge: column not found: " + s)
@@ -294,8 +293,8 @@ func (r *Rows) allStruct(columns []string, t *Table, v reflect.Value) (err error
 	a := make(Columns, len(columns))
 	m := make(map[int]struct{}, len(columns))
 	for i, s := range columns {
-		if r.TransformFunc != nil {
-			s = r.TransformFunc(s)
+		if r.DealName != nil {
+			s = r.DealName(s)
 		}
 		if c := t.Find(s); c == nil {
 			return errors.New("huge: column not found: " + s)
@@ -408,8 +407,8 @@ func (r *Rows) All(i interface{}) error {
 			a := make([]interface{}, len(columns))
 			m := make(map[string]int, len(columns))
 			for i, s := range columns {
-				if r.TransformFunc != nil {
-					s = r.TransformFunc(s)
+				if r.DealName != nil {
+					s = r.DealName(s)
 				}
 				if _, ok := m[s]; ok {
 					return errors.New("huge: duplicate column: " + s)
