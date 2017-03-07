@@ -616,7 +616,7 @@ func (t *Table) CreateTable(s query.Starter, temporary, ifNotExists bool) (strin
 		} else if c.isVersion() {
 			option = query.OptionVersion
 		}
-		dbType, optionValue := s.Mapping(goType, f.size, option)
+		dbType, optionValue := s.Mapping(c.Name, goType, f.size, option)
 		if len(dbType) == 0 {
 			return "", c.err("unsupported type: " + goType)
 		}
@@ -624,8 +624,7 @@ func (t *Table) CreateTable(s query.Starter, temporary, ifNotExists bool) (strin
 		if c.isPrimaryKey() {
 			a = append(a, "PRIMARY KEY")
 		} else {
-			if !(c.canNil() || c.isCollapse()) ||
-				(option == query.OptionZeroValue && len(optionValue) > 0) {
+			if !c.canNil() && !c.isCollapse() {
 				a = append(a, "NOT NULL")
 			}
 			if c.is(oUnique) {
@@ -644,11 +643,7 @@ func (t *Table) CreateTable(s query.Starter, temporary, ifNotExists bool) (strin
 	if len(columns) == 0 {
 		return "", t.errNoColumns()
 	}
-	c, ok := reflect.New(t.s.t).Interface().(query.Creater)
-	if !ok {
-		c, ok = s.(query.Creater)
-	}
-	if ok {
+	if c, ok := s.(query.Creater); ok {
 		return c.CreateTable(tableName, columns, temporary, ifNotExists), nil
 	}
 	return query.CreateTable(tableName, columns, temporary, ifNotExists), nil

@@ -70,7 +70,7 @@ func (PostgreSQL) Returning(b byte, c string) string {
 	return "RETURNING " + c
 }
 
-func (PostgreSQL) Mapping(goType string, maxSize, option int) (_ string, optionValue string) {
+func (PostgreSQL) Mapping(_, goType string, maxSize, option int) (_ string, optionValue string) {
 	switch option {
 	case OptionAutoIncrement:
 		switch goType {

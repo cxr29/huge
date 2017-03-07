@@ -42,11 +42,22 @@ func (o Operand) IsNull() Condition {
 	return C("? IS NULL", o)
 }
 
+func (o Operand) IsNotNull() Condition {
+	return C("? IS NOT NULL", o)
+}
+
 func (o Operand) Eq(i interface{}) Condition {
 	if i == nil {
 		return o.IsNull()
 	}
 	return C("? = ?", o, i)
+}
+
+func (o Operand) Ne(i interface{}) Condition {
+	if i == nil {
+		return o.IsNotNull()
+	}
+	return C("? != ?", o, i)
 }
 
 func (o Operand) Lt(i interface{}) Condition {
@@ -183,8 +194,16 @@ func IsNull(c string) Condition {
 	return IQ(c).IsNull()
 }
 
+func IsNotNull(c string) Condition {
+	return IQ(c).IsNotNull()
+}
+
 func Eq(c string, i interface{}) Condition {
 	return IQ(c).Eq(i)
+}
+
+func Ne(c string, i interface{}) Condition {
+	return IQ(c).Ne(i)
 }
 
 func Lt(c string, i interface{}) Condition {

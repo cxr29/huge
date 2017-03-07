@@ -70,7 +70,7 @@ func (SQLite) Returning(byte, string) string {
 	return ""
 }
 
-func (SQLite) Mapping(goType string, maxSize, option int) (_ string, optionValue string) {
+func (SQLite) Mapping(_, goType string, maxSize, option int) (_ string, optionValue string) {
 	switch option {
 	case OptionAutoIncrement:
 		optionValue = "AUTOINCREMENT"

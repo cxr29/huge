@@ -119,7 +119,7 @@ var (
 	}
 )
 
-func (mysql MySQL) Mapping(goType string, maxSize, option int) (string, string) {
+func (mysql MySQL) Mapping(_, goType string, maxSize, option int) (string, string) {
 	a, ok := mysqlTypes[goType]
 	switch option {
 	case OptionAutoIncrement:
@@ -155,14 +155,13 @@ func (mysql MySQL) Mapping(goType string, maxSize, option int) (string, string) 
 			}
 		case "json":
 			a[0] = "JSON"
-		case "string": // interface, xml
-			a[1] = "''"
-			fallthrough
-		default:
+		default: // string, interface, xml
 			if maxSize == 0 {
 				a[0] = "VARCHAR(255)"
+				a[1] = "''"
 			} else if maxSize > 0 && maxSize <= 255 {
 				a[0] = fmt.Sprintf("VARCHAR(%d)", maxSize)
+				a[1] = "''"
 			} else if maxSize > 16777215 {
 				a[0] = "LONGTEXT"
 			} else if maxSize > 65535 {
