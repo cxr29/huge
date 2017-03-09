@@ -243,7 +243,26 @@ func GroupBy(a ...string) *Query {
 	return Q3Empty("GROUP BY ", ", ", "").Add(a...)
 }
 
-func Limit(n int) Expression {
+func Limit(a ...int) Expression {
+	switch len(a) {
+	case 0:
+		return empty("LIMIT")
+	case 1:
+		return limit(a[0])
+	case 2:
+		if a[0] < 0 {
+			return limit(a[1])
+		} else if a[1] < 0 {
+			return Offset(a[0])
+		} else {
+			return Literalf("LIMIT %d OFFSET %d", a[1], a[0])
+		}
+	default:
+		return nonef("limit: %v", a)
+	}
+}
+
+func limit(n int) Expression {
 	if n < 0 {
 		return empty("LIMIT")
 	}

@@ -245,8 +245,7 @@ Loop:
 			if j != nil {
 				b[i], f[i] = scanNew(j)
 			} else {
-				b[i] = reflect.New(t)
-				f[i] = nil
+				b[i], f[i] = reflect.New(t).Interface(), nil
 			}
 		}
 		if err = r.rows.Scan(b...); err != nil {
