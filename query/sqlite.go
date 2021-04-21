@@ -19,7 +19,7 @@ var (
 )
 
 func (SQLite) Dialect() string {
-	return "sqlite"
+	return "sqlite3"
 }
 
 func (SQLite) Parameter(n bool, i int) string {

@@ -41,7 +41,7 @@ func Open(driverName, dataSourceName string) (h Huge, err error) {
 	case "postgres":
 		h.Starter = query.PostgreSQLStarter
 		h.TimePrec = 6
-	case "sqlite":
+	case "sqlite3":
 		h.Starter = query.SQLiteStarter
 		h.TimePrec = 9
 	default:

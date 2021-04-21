@@ -31,7 +31,7 @@ func NewStarter(dialect string) Starter {
 		return MySQLStarter
 	case "postgres":
 		return PostgreSQLStarter
-	case "sqlite":
+	case "sqlite3":
 		return SQLiteStarter
 	default:
 		return StandardStarter
